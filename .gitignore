@@ -1,0 +1,13 @@
+/target/
+
+# Runtime logs generated while running the proxy locally.
+*.log
+proxy.stdout.log
+proxy.stderr.log
+
+# Local secrets and machine-specific environment overrides.
+.env
+.env.*
+
+# Local Codex/OMX state, plans, and logs.
+.omx/
