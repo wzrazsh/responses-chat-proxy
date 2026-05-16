@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct ProviderConfig {
@@ -53,6 +54,16 @@ impl AppConfig {
                 default_model: "codex-MiniMax-M2.7".to_string(),
             },
         );
+        providers.insert(
+            "opencode".to_string(),
+            ProviderConfig {
+                name: "OpenCode".to_string(),
+                base_url: "https://opencode.ai/zen/go/v1".to_string(),
+                chat_path: "/chat/completions".to_string(),
+                api_key_env: "OPENCODE_API_KEY".to_string(),
+                default_model: "deepseek-v4-flash".to_string(),
+            },
+        );
 
         AppConfig {
             bind_addr,
@@ -65,5 +76,53 @@ impl AppConfig {
 
     pub fn get_api_key(&self, provider_key: &str) -> Option<String> {
         std::env::var(provider_key).ok()
+    }
+
+    pub fn get_opencode_auth_json_path() -> Option<PathBuf> {
+        let data_dir = std::env::var("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .ok()
+            .or_else(|| {
+                dirs::home_dir().map(|h| h.join(".local").join("share"))
+            });
+
+        data_dir.map(|d| d.join("opencode").join("auth.json"))
+    }
+
+    pub fn read_opencode_api_key() -> Option<String> {
+        if let Ok(content) = std::env::var("OPENCODE_AUTH_CONTENT") {
+            let parsed: serde_json::Value = serde_json::from_str(&content).ok()?;
+            for key in ["opencode-go", "opencode"] {
+                if let Some(entry) = parsed.get(key) {
+                    if let Some(api_key) = Self::extract_key_from_auth_entry(entry) {
+                        return Some(api_key);
+                    }
+                }
+            }
+        }
+
+        let path = Self::get_opencode_auth_json_path()?;
+        if !path.exists() {
+            return None;
+        }
+        let content = std::fs::read_to_string(&path).ok()?;
+        let parsed: serde_json::Value = serde_json::from_str(&content).ok()?;
+        for key in ["opencode-go", "opencode"] {
+            if let Some(entry) = parsed.get(key) {
+                if let Some(api_key) = Self::extract_key_from_auth_entry(entry) {
+                    return Some(api_key);
+                }
+            }
+        }
+        None
+    }
+
+    fn extract_key_from_auth_entry(entry: &serde_json::Value) -> Option<String> {
+        match entry.get("type")?.as_str()? {
+            "api" => entry.get("key").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            "oauth" => entry.get("access").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            "wellknown" => entry.get("token").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            _ => None,
+        }
     }
 }

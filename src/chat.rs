@@ -103,8 +103,14 @@ pub fn convert_request(req: ResponsesRequest) -> ChatRequest {
         }
     }
 
+    let model = if req.model.starts_with("opencode-") {
+        req.model.strip_prefix("opencode-").unwrap_or(&req.model).to_string()
+    } else {
+        req.model
+    };
+
     ChatRequest {
-        model: req.model,
+        model,
         messages,
         temperature: req.temperature,
         max_tokens: req.max_output_tokens,
@@ -442,5 +448,39 @@ mod tests {
         let tools = chat.tools.unwrap();
         assert_eq!(tools.as_array().unwrap().len(), 1);
         assert_eq!(tools[0]["function"]["name"], "noop_tool");
+    }
+
+    #[test]
+    fn test_opencode_model_prefix_stripped() {
+        let req = ResponsesRequest {
+            model: "opencode-gpt-4o".to_string(),
+            input: Input::String("hi".to_string()),
+            instructions: None,
+            temperature: None,
+            max_output_tokens: None,
+            top_p: None,
+            stream: false,
+            tools: None,
+            tool_choice: None,
+        };
+        let chat = convert_request(req);
+        assert_eq!(chat.model, "gpt-4o");
+    }
+
+    #[test]
+    fn test_non_opencode_model_unchanged() {
+        let req = ResponsesRequest {
+            model: "deepseek-chat".to_string(),
+            input: Input::String("hi".to_string()),
+            instructions: None,
+            temperature: None,
+            max_output_tokens: None,
+            top_p: None,
+            stream: false,
+            tools: None,
+            tool_choice: None,
+        };
+        let chat = convert_request(req);
+        assert_eq!(chat.model, "deepseek-chat");
     }
 }

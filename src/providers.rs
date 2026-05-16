@@ -8,6 +8,9 @@ pub fn route_provider(model: &str, config: &AppConfig) -> Result<String, AppErro
     if model.starts_with("MiniMax") || model.starts_with("minimax") || model.starts_with("codex-MiniMax") {
         return Ok("minimax".to_string());
     }
+    if model.starts_with("opencode-") {
+        return Ok("opencode".to_string());
+    }
     if config.providers.contains_key(&config.default_provider) {
         return Ok(config.default_provider.clone());
     }
@@ -24,9 +27,17 @@ pub fn resolve_provider(
     let provider_cfg = config.providers.get(&provider_name).ok_or_else(|| {
         AppError::bad_request(format!("provider '{provider_name}' not found in config"))
     })?;
-    let api_key = config.get_api_key(&provider_cfg.api_key_env).ok_or_else(|| {
+
+    let api_key = if provider_name == "opencode" {
+        config.get_api_key(&provider_cfg.api_key_env)
+            .or_else(|| AppConfig::read_opencode_api_key())
+    } else {
+        config.get_api_key(&provider_cfg.api_key_env)
+    };
+
+    let api_key = api_key.ok_or_else(|| {
         AppError::bad_request(format!(
-            "API key missing: set {} environment variable",
+            "API key missing: set {} environment variable, or ensure OpenCode auth.json exists",
             provider_cfg.api_key_env
         ))
     })?;
@@ -61,6 +72,14 @@ mod tests {
         assert_eq!(route_provider("codex-MiniMax-M2.7", &c).unwrap(), "minimax");
         assert_eq!(route_provider("MiniMax-M2.7", &c).unwrap(), "minimax");
         assert_eq!(route_provider("minimax-anything", &c).unwrap(), "minimax");
+    }
+
+    #[test]
+    fn test_route_opencode() {
+        let c = test_config();
+        assert_eq!(route_provider("opencode-gpt-4o", &c).unwrap(), "opencode");
+        assert_eq!(route_provider("opencode-claude-sonnet-4", &c).unwrap(), "opencode");
+        assert_eq!(route_provider("opencode-deepseek-v4-flash", &c).unwrap(), "opencode");
     }
 
     #[test]
