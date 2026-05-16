@@ -6,6 +6,8 @@ mod error;
 mod providers;
 mod responses;
 mod stream;
+mod tray;
+mod test_page;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -27,6 +29,8 @@ use crate::error::AppError;
 use crate::providers::resolve_provider;
 use crate::responses::ResponsesRequest;
 use crate::stream::build_stream;
+use crate::tray::setup_tray;
+use crate::test_page::{test_page_handler, api_status_handler};
 
 fn strip_opencode_prefix(model: &str) -> String {
     if model.starts_with("opencode-") {
@@ -64,16 +68,23 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let app = Router::new()
+        .route("/", get(test_page_handler))
         .route("/health", get(health_handler))
         .route("/v1/models", get(models_handler))
         .route("/v1/responses", post(responses_handler))
         .route("/responses", post(responses_handler))
         .route("/v1/chat/completions", post(chat_completions_handler))
+        .route("/api/status", get(api_status_handler))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state);
 
     info!("starting responses-chat-proxy on {bind_addr}");
+
+    if let Err(e) = setup_tray(&bind_addr) {
+        eprintln!("Failed to setup tray: {}. Continuing without tray...", e);
+    }
+
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
     axum::serve(listener, app).await?;
 
